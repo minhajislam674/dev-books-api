@@ -5,6 +5,9 @@ const express = require("express")
     path = require('path'),
     { v4: uuidv4 } = require('uuid');
 
+const {PrismaClient} = require("@prisma/client")
+const prisma = new PrismaClient()
+
 // create express app
 const app = express()
 
@@ -21,65 +24,6 @@ app.use(bodyParser.json())
 //serving static files
 app.use(express.static('public'))
 
-let books = [
-    {   
-        "id": "1",
-        "title": "Clean Code",
-        "author": {
-            "name": "Robert C. Martin",
-            "bio": "Robert Cecil Martin, commonly called Uncle Bob, is a software engineer, advocate of Agile development methods, and President of Object Mentor Inc. Martin and his team of software consultants use Object-Oriented Design, Patterns, UML, Agile Methodologies, and eXtreme Programming with worldwide clients.",
-            "image": "https://images.gr-assets.com/authors/1490470967p8/45372.jpg"
-        },
-        "description": "Clean Code: A Handbook of Agile Software Craftsmanship is a software development book by Robert C. Martin, published in 2008. It is a guide on software craftsmanship and how to write code that can be understood by humans. It is a sequel to Martin's 2000 book Agile Software Development, and is part of the Agile Manifesto.",
-        "image": "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1436202607i/3735293.jpg",
-        "genres": ["Coding", "Programming", "Computer Science", "Software"],
-        "publishDate": "2007"
-    },
-    {   
-        "id": "2",
-        "title": "The Pragmatic Programmer",
-        "author": {
-            "name": "Andrew Hunt",
-            "bio": "Andrew Hunt is a software developer, author, and speaker. He is the co-author of The Pragmatic Programmer: From Journeyman to Master, a book on software development, and co-author of Pragmatic Version Control Using Subversion, a book on version control. He is also the co-author of Pragmatic Thinking and Learning: Refactor Your Wetware, a book on learning and thinking.",
-            "image": "https://images.gr-assets.com/authors/1327862044p8/10372.jpg"
-        },
-        "description": "The Pragmatic Programmer: From Journeyman to Master is a book about software craftsmanship and how to be a better programmer. It was written by Andy Hunt and Dave Thomas, and published in 1999 by Addison-Wesley. The book is a sequel to their earlier book, The Pragmatic Programmer.",
-        "image": "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1436202607i/4099.jpg",
-        "genres": ["Coding", "Programming", "Computer Science", "Software"],
-        "publishDate": "1999"
-    },
-    {   
-        "id": "3",
-        "title": "The Clean Coder",
-        "author": {
-            "name": "Robert C. Martin",
-            "bio": "Robert Cecil Martin, commonly called Uncle Bob, is a software engineer, advocate of Agile development methods, and President of Object Mentor Inc. Martin and his team of software consultants use Object-Oriented Design, Patterns, UML, Agile Methodologies, and eXtreme Programming with worldwide clients.",
-            "image": "https://images.gr-assets.com/authors/1490470967p8/45372.jpg"
-        },
-        "description": "The Clean Coder: A Code of Conduct for Professional Programmers is a book by Robert C. Martin, published in 2008. It is a sequel to his 2008 book Clean Code: A Handbook of Agile Software Craftsmanship. The book is part of the Agile Manifesto.",
-        "image": "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1436202607i/3735296.jpg",
-        "genres": ["Coding", "Programming", "Computer Science", "Software"],
-        "publishDate": "2008"
-    }
-]
-
-let users = [
-    {
-        id: "1",
-        username: "user1",
-        favoriteBooks: []
-    },
-    {
-        id: "2",
-        username: "user2",
-        favoriteBooks: []
-    },
-    {
-        id: "3",
-        username: "user3",
-        favoriteBooks: ["3"]
-    }
-]
 
 
 //API Routes
@@ -91,14 +35,24 @@ app.get('/', (req, res) => {
 
 
 //get all books
-app.get('/books', (req, res) => {
+app.get('/books', async (req, res) => {
+
+    const books = await prisma.book.findMany({
+        include: { genre: true }
+    })
     res.status(200).json(books);
 });
 
+
 //get books by id
-app.get('/books/:title', (req, res) => {
-    const {title} = req.params;
-    const book = books.find(book => book.title === title);
+
+app.get('/books/:id', async (req, res) => {
+    const {id} = req.params;
+    const book = await prisma.book.findUnique({
+        where: {
+            id: Number(id)
+        }
+    })
 
     if(book) {
         res.status(200).json(book);
@@ -106,6 +60,7 @@ app.get('/books/:title', (req, res) => {
         res.status(404).send('Book not found');
     }
 });
+
 
 //get author by name
 app.get('/books/authors/:authorName', (req, res) => {
@@ -120,33 +75,44 @@ app.get('/books/authors/:authorName', (req, res) => {
 });
 
 
-//add a new user
-app.post('/users', (req, res) => {
-    const {username} = req.body;
-    const user = users.find(user => user.username === username);
-
-    if(user) {
-        res.status(400).send('User already exists');
-    } else {
-        const newUser = {
-            id: uuidv4(),
-            username,
-            favoriteBooks: []
+//add a new user using prisma
+app.post('/users', async (req, res) => {
+    const {name, email, password} = req.body;
+    const userExists = await prisma.user.findUnique({
+        where: {
+            email: email
         }
-        users.push(newUser);
-        res.status(201).json(newUser);
+    })
+    
+    if(userExists) {
+        res.status(400).send('This user email is taken, choose a different email address');
+    } else {
+        const user = await prisma.user.create({
+            data: {
+                name: name,
+                email: email,
+                password: password
+            }
+        })
+        res.status(201).json(user);
     }
 });
 
 // delete an existing user
-
-app.delete('/users/:id', (req, res) => {
-    const { id } = req.params;
-    const user = users.find(user => user.id === id);
-
+app.delete('/users/:id', async (req, res) => {
+    const {id} = req.params;
+    const user = await prisma.user.findUnique({
+        where: {
+            id: Number(id)
+        }
+    })
     if(user) {
-        users = users.filter(user => user.id !== id);
-        res.json(users)
+        await prisma.user.delete({
+            where: {
+                id: Number(id)
+            }
+        })
+        res.status(200).send('User deleted successfully');
     } else {
         res.status(404).send('User not found');
     }
@@ -173,8 +139,9 @@ app.put('/users/:id', (req, res) => {
 });
 
 
-//get all users
-app.get('/users', (req, res) => {
+//get all users with prisma
+app.get('/users', async (req, res) => {
+    const users = await prisma.user.findMany();
     res.status(200).json(users);
 });
 
