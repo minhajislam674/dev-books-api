@@ -5,6 +5,14 @@ const express = require("express")
     path = require('path'),
     { v4: uuidv4 } = require('uuid');
 
+const { check, validationResult } = require('express-validator');
+
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
+
+const {PrismaClient} = require("@prisma/client")
+const prisma = new PrismaClient()
+
 // create express app
 const app = express()
 
@@ -12,94 +20,73 @@ const app = express()
 // a ‘log.txt’ file is created in root directory
 const accessLogStream = fs.createWriteStream(path.join(__dirname, 'log.txt'), {flags: 'a'})
 
+// set cors 
+const cors = require('cors');
+let allowedOrigins = ['http://localhost:8080', 'http://dev-books.com'];
+app.use(cors({
+    origin: function(origin, callback){
+        // allow requests with no origin
+        // (like mobile apps or curl requests)
+        if(!origin) return callback(null, true);
+        if(allowedOrigins.indexOf(origin) === -1){
+            let message = 'The CORS policy for this application doesn’t allow access from origin ' + origin;
+            return callback(new Error(message ), false);
+        }
+        return callback(null, true);
+    }
+}));
+
+
 //Logging middleware
 app.use(morgan('combined', {stream: accessLogStream}))
 
 //Body parser middleware
-app.use(bodyParser.json())
+app.use(bodyParser.json());
+
+let auth = require('./auth')(app);
+let passport = require('passport');
+require('./passport');
+
+
 
 //serving static files
 app.use(express.static('public'))
 
-let books = [
-    {   
-        "id": "1",
-        "title": "Clean Code",
-        "author": {
-            "name": "Robert C. Martin",
-            "bio": "Robert Cecil Martin, commonly called Uncle Bob, is a software engineer, advocate of Agile development methods, and President of Object Mentor Inc. Martin and his team of software consultants use Object-Oriented Design, Patterns, UML, Agile Methodologies, and eXtreme Programming with worldwide clients.",
-            "image": "https://images.gr-assets.com/authors/1490470967p8/45372.jpg"
-        },
-        "description": "Clean Code: A Handbook of Agile Software Craftsmanship is a software development book by Robert C. Martin, published in 2008. It is a guide on software craftsmanship and how to write code that can be understood by humans. It is a sequel to Martin's 2000 book Agile Software Development, and is part of the Agile Manifesto.",
-        "image": "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1436202607i/3735293.jpg",
-        "genres": ["Coding", "Programming", "Computer Science", "Software"],
-        "publishDate": "2007"
-    },
-    {   
-        "id": "2",
-        "title": "The Pragmatic Programmer",
-        "author": {
-            "name": "Andrew Hunt",
-            "bio": "Andrew Hunt is a software developer, author, and speaker. He is the co-author of The Pragmatic Programmer: From Journeyman to Master, a book on software development, and co-author of Pragmatic Version Control Using Subversion, a book on version control. He is also the co-author of Pragmatic Thinking and Learning: Refactor Your Wetware, a book on learning and thinking.",
-            "image": "https://images.gr-assets.com/authors/1327862044p8/10372.jpg"
-        },
-        "description": "The Pragmatic Programmer: From Journeyman to Master is a book about software craftsmanship and how to be a better programmer. It was written by Andy Hunt and Dave Thomas, and published in 1999 by Addison-Wesley. The book is a sequel to their earlier book, The Pragmatic Programmer.",
-        "image": "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1436202607i/4099.jpg",
-        "genres": ["Coding", "Programming", "Computer Science", "Software"],
-        "publishDate": "1999"
-    },
-    {   
-        "id": "3",
-        "title": "The Clean Coder",
-        "author": {
-            "name": "Robert C. Martin",
-            "bio": "Robert Cecil Martin, commonly called Uncle Bob, is a software engineer, advocate of Agile development methods, and President of Object Mentor Inc. Martin and his team of software consultants use Object-Oriented Design, Patterns, UML, Agile Methodologies, and eXtreme Programming with worldwide clients.",
-            "image": "https://images.gr-assets.com/authors/1490470967p8/45372.jpg"
-        },
-        "description": "The Clean Coder: A Code of Conduct for Professional Programmers is a book by Robert C. Martin, published in 2008. It is a sequel to his 2008 book Clean Code: A Handbook of Agile Software Craftsmanship. The book is part of the Agile Manifesto.",
-        "image": "https://images-na.ssl-images-amazon.com/images/S/compressed.photo.goodreads.com/books/1436202607i/3735296.jpg",
-        "genres": ["Coding", "Programming", "Computer Science", "Software"],
-        "publishDate": "2008"
-    }
-]
-
-let users = [
-    {
-        id: "1",
-        username: "user1",
-        favoriteBooks: []
-    },
-    {
-        id: "2",
-        username: "user2",
-        favoriteBooks: []
-    },
-    {
-        id: "3",
-        username: "user3",
-        favoriteBooks: ["3"]
-    }
-]
 
 
 //API Routes
 
-// Home page
+// home page
 app.get('/', (req, res) => {
     res.send('Welcome to dev-books!!!!!!!!');
 });
 
 
 //get all books
-app.get('/books', (req, res) => {
+app.get('/books', passport.authenticate('jwt', { session: false }), async (req, res) => {
+
+    const books = await prisma.book.findMany({
+        include: { 
+            genres: true,
+            authors: true
+         }
+    })
     res.status(200).json(books);
 });
 
-//get books by id
-app.get('/books/:title', (req, res) => {
-    const {title} = req.params;
-    const book = books.find(book => book.title === title);
 
+//get books by id
+app.get('/books/:id', async (req, res) => {
+    const {id} = req.params;
+    const book = await prisma.book.findUnique({
+        where: {
+            id: Number(id)
+        },
+        include: {
+            genres: true,
+            authors: true
+        }
+    })
     if(book) {
         res.status(200).json(book);
     } else {
@@ -107,11 +94,18 @@ app.get('/books/:title', (req, res) => {
     }
 });
 
-//get author by name
-app.get('/books/authors/:authorName', (req, res) => {
-    const {authorName} = req.params;
-    const author = books.find(book => book.author.name === authorName).author;
 
+//get author by id
+app.get('/authors/:authorID', async (req, res) => {
+    const {authorID} = req.params;
+    const author = await prisma.author.findUnique({
+        where: {
+            id: Number(authorID)
+        },
+        include: {
+            books: true
+        }
+    })
     if(author) {
         res.status(200).json(author);
     } else {
@@ -120,53 +114,91 @@ app.get('/books/authors/:authorName', (req, res) => {
 });
 
 
-//add a new user
-app.post('/users', (req, res) => {
-    const {username} = req.body;
-    const user = users.find(user => user.username === username);
 
-    if(user) {
-        res.status(400).send('User already exists');
-    } else {
-        const newUser = {
-            id: uuidv4(),
-            username,
-            favoriteBooks: []
+//register a new user
+app.post('/users',
+
+    //validation with express validator
+    [
+        check('email', 'Email is not valid').isEmail(),
+        check('username', 'Username cannot be empty').notEmpty(),
+        check('username', 'Username contains non alphanumeric characters - not allowed.').isAlphanumeric(),
+        check('password', 'Password must be at least 5 chars long and contain one number').isLength({ min: 5 }).matches(/\d/),
+        check('password', 'Password cannot be empty').notEmpty()
+    ], async (req, res) => {
+
+    // Finds the validation errors in this request and wraps them in an object with handy functions
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(422).json({ errors: errors.array() });
+    }
+    const {email, username, password} = req.body;
+    const userExists = await prisma.user.findUnique({
+        where: {
+            email: email
         }
-        users.push(newUser);
-        res.status(201).json(newUser);
+    })
+    if(userExists) {
+        res.status(400).send('This user email is taken, choose a different email address');
+    } else {
+        try {
+            const hashedPassword = await bcrypt.hash(password, saltRounds);
+            const user = await prisma.user.create({
+                data: {
+                    email: email,
+                    username: username,
+                    password: hashedPassword
+                }
+            })
+            res.status(201).json(user);
+        } catch (error) {
+            res.status(500).send('Something went wrong');
+        }
     }
 });
 
 // delete an existing user
-
-app.delete('/users/:id', (req, res) => {
-    const { id } = req.params;
-    const user = users.find(user => user.id === id);
-
+app.delete('/users/:userId', async (req, res) => {
+    const {userId} = req.params;
+    const user = await prisma.user.findUnique({
+        where: {
+            id: Number(userId)
+        }
+    })
     if(user) {
-        users = users.filter(user => user.id !== id);
-        res.json(users)
+        await prisma.user.delete({
+            where: {
+                id: Number(userId)
+            }
+        })
+        res.status(200).send('User deleted successfully');
     } else {
         res.status(404).send('User not found');
     }
 });
 
 
-//Update username by id and verify if new username already exists
-app.put('/users/:id', (req, res) => {
-    const {id} = req.params;
+//Update username by id
+app.put('/users/:userId', async (req, res) => {
+    const {userId} = req.params;
     const {username} = req.body;
-    const user = users.find(user => user.id === id);
+
+    const user = await prisma.user.findUnique({
+        where: {
+            id: Number(userId)
+        }
+    })
 
     if(user) {
-        const userExists = users.find(user => user.username === username);
-        if(userExists) {
-            res.status(400).send('This username is taken, choose a different username');
-        } else {
-            user.username = username;
-            res.status(200).json(user);
-        }
+        const updatedUser = await prisma.user.update({
+            where: {
+                id: Number(userId)
+            },
+            data: {
+                username: username
+            }
+        })
+        res.status(200).json(updatedUser);
     } else {
         res.status(404).send('User not found');
     }
@@ -174,15 +206,19 @@ app.put('/users/:id', (req, res) => {
 
 
 //get all users
-app.get('/users', (req, res) => {
+app.get('/users', async (req, res) => {
+    const users = await prisma.user.findMany();
     res.status(200).json(users);
 });
 
-//get user data by username
-app.get('/users/:username', (req, res) => {
-    const {username} = req.params;
-    const user = users.find(user => user.username === username);
-
+//get user data by id
+app.get('/users/:userId', async (req, res) => {
+    const {userId} = req.params;
+    const user = await prisma.user.findUnique({
+        where: {
+            id: Number(userId)
+        }
+    })
     if(user) {
         res.status(200).json(user);
     } else {
@@ -190,35 +226,54 @@ app.get('/users/:username', (req, res) => {
     }
 });
 
-//get user's favorite books by username
-app.get('/users/:username/favorites', (req, res) => {
-    const {username} = req.params;
-    const user = users.find(user => user.username === username);
 
-    if(user) {
-        res.status(200).json(user.favoriteBooks);
-    } else {
-        res.status(404).send('User not found');
-    }
-});
-
-//add a book to user's favorite books
-
-app.post('/users/:userId/favorites/:bookId', (req, res) => {
+//add a book to user's book list
+app.post('/users/:userId/favorites/:bookId', async (req, res) => {
     const { userId, bookId } = req.params;
-    const user = users.find(user => user.id === userId);
-    const book = books.find(book => book.id === bookId).id;
-
+    const user = await prisma.user.findUnique({
+        where: {
+            id: Number(userId)
+        }
+    })
+    const book = await prisma.book.findUnique({
+        where: {
+            id: Number(bookId)
+        }
+    })
     if(user) {
         if(book) {
-            const bookExists = user.favoriteBooks.find(book => book === bookId);
+            //book exists check prisma
+            const bookExists = await prisma.user.findFirst({
+                where: {
+                    id: Number(userId),
+                    books: {
+                        some: {
+                            id: Number(bookId)
+                        }
+                    }
+                }
+            })
+            
             if(bookExists) {
                 res.status(400).send('Book already exists in favorites');
             } else {
-                user.favoriteBooks.push(book);
-                res.status(201).json(user.favoriteBooks);
+                const updatedUser = await prisma.user.update({
+                    where: {
+                        id: Number(userId)
+                    },
+                    data: {
+                        books: {
+                            connect: {
+                                id: Number(bookId)
+                            }
+                        }
+                    },
+                    include: {
+                        books: true
+                    }
+                })
+                res.status(200).json(updatedUser);
             }
-
         } else {
             res.status(404).send('Book not found');
         }
@@ -227,22 +282,53 @@ app.post('/users/:userId/favorites/:bookId', (req, res) => {
     }
 });
 
-//delete a book from user's favorite books
-app.delete('/users/:userId/favorites/:bookId', (req, res) => {
-    const { userId, bookId } = req.params;
-    const user = users.find(user => user.id === userId);
-    const book = books.find(book => book.id === bookId).id;
 
+//delete a book from user's book list
+app.delete('/users/:userId/favorites/:bookId', async (req, res) => {
+    const { userId, bookId } = req.params;
+    const user = await prisma.user.findUnique({
+        where: {
+            id: Number(userId)
+        }
+    })
+    const book = await prisma.book.findUnique({
+        where: {
+            id: Number(bookId)
+        }
+    })
     if(user) {
         if(book) {
-            const bookExists = user.favoriteBooks.find(book => book === bookId);
+            //book exists check prisma
+            const bookExists = await prisma.user.findFirst({ 
+                where: {
+                    id: Number(userId),
+                    books: {
+                        some: {
+                            id: Number(bookId)
+                        }
+                    }
+                }
+            })
             if(bookExists) {
-                user.favoriteBooks = user.favoriteBooks.filter(id => id !== bookId);
-                res.status(200).json(user.favoriteBooks);
+                const updatedUser = await prisma.user.update({
+                    where: {
+                        id: Number(userId)
+                    },
+                    data: {
+                        books: {
+                            disconnect: {
+                                id: Number(bookId)
+                            }
+                        }
+                    },
+                    include: {
+                        books: true
+                    }
+                })
+                res.status(200).json(updatedUser);
             } else {
                 res.status(400).send('Book does not exist in favorites');
             }
-
         } else {
             res.status(404).send('Book not found');
         }
@@ -259,9 +345,7 @@ app.use((err, req, res, next) => {
     res.status(500).send('Something broke!')
 })
 
-
 //Listen for requests
 app.listen(8080, () => {
     console.log("Your app is listening on port 8080.")
 })
-
