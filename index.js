@@ -5,6 +5,11 @@ const express = require("express")
     path = require('path'),
     { v4: uuidv4 } = require('uuid');
 
+const { check, validationResult } = require('express-validator');
+
+const bcrypt = require('bcrypt');
+const saltRounds = 10;
+
 const {PrismaClient} = require("@prisma/client")
 const prisma = new PrismaClient()
 
@@ -14,6 +19,23 @@ const app = express()
 // create a write stream (in append mode)
 // a ‘log.txt’ file is created in root directory
 const accessLogStream = fs.createWriteStream(path.join(__dirname, 'log.txt'), {flags: 'a'})
+
+// set cors 
+const cors = require('cors');
+let allowedOrigins = ['http://localhost:8080', 'http://dev-books.com'];
+app.use(cors({
+    origin: function(origin, callback){
+        // allow requests with no origin
+        // (like mobile apps or curl requests)
+        if(!origin) return callback(null, true);
+        if(allowedOrigins.indexOf(origin) === -1){
+            let message = 'The CORS policy for this application doesn’t allow access from origin ' + origin;
+            return callback(new Error(message ), false);
+        }
+        return callback(null, true);
+    }
+}));
+
 
 //Logging middleware
 app.use(morgan('combined', {stream: accessLogStream}))
@@ -94,7 +116,22 @@ app.get('/authors/:authorID', async (req, res) => {
 
 
 //register a new user
-app.post('/users', async (req, res) => {
+app.post('/users',
+
+    //validation with express validator
+    [
+        check('email', 'Email is not valid').isEmail(),
+        check('username', 'Username cannot be empty').notEmpty(),
+        check('username', 'Username contains non alphanumeric characters - not allowed.').isAlphanumeric(),
+        check('password', 'Password must be at least 5 chars long and contain one number').isLength({ min: 5 }).matches(/\d/),
+        check('password', 'Password cannot be empty').notEmpty()
+    ], async (req, res) => {
+
+    // Finds the validation errors in this request and wraps them in an object with handy functions
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+        return res.status(422).json({ errors: errors.array() });
+    }
     const {email, username, password} = req.body;
     const userExists = await prisma.user.findUnique({
         where: {
@@ -104,14 +141,19 @@ app.post('/users', async (req, res) => {
     if(userExists) {
         res.status(400).send('This user email is taken, choose a different email address');
     } else {
-        const user = await prisma.user.create({
-            data: {
-                email: email,
-                username: username,
-                password: password
-            }
-        })
-        res.status(201).json(user);
+        try {
+            const hashedPassword = await bcrypt.hash(password, saltRounds);
+            const user = await prisma.user.create({
+                data: {
+                    email: email,
+                    username: username,
+                    password: hashedPassword
+                }
+            })
+            res.status(201).json(user);
+        } catch (error) {
+            res.status(500).send('Something went wrong');
+        }
     }
 });
 
