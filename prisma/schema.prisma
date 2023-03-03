@@ -11,24 +11,25 @@ datasource db {
 }
 
 model User {
-  id            Int    @id @default(autoincrement())
-  email         String @unique
-  username      String
-  password      String
-  favoriteBooks Book[]
+  id       Int    @id @default(autoincrement())
+  email    String @unique
+  username String
+  password String
+  books    Book[]
 }
 
+//many to many relation for book and author
 model Book {
-  id       Int     @id @default(autoincrement())
-  title    String
-  author   String
-  year     Int
-  pages    Int
-  image    String
-  User     User?   @relation(fields: [userId], references: [id])
-  userId   Int?
-  Author   Author? @relation(fields: [authorId], references: [id])
-  authorId Int?
+  id      Int      @id @default(autoincrement())
+  title   String
+  summary String
+  year    Int
+  pages   Int
+  image   String
+  User    User?    @relation(fields: [userId], references: [id])
+  userId  Int?
+  authors Author[] @relation("book_authors")
+  genres  Genre[]  @relation("book_genres")
 }
 
 model Author {
@@ -36,5 +37,11 @@ model Author {
   name  String
   bio   String
   image String
-  books Book[]
+  books Book[] @relation("book_authors")
+}
+
+model Genre {
+  id    Int    @id @default(autoincrement())
+  name  String
+  books Book[] @relation("book_genres")
 }

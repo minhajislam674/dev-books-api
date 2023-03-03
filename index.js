@@ -19,7 +19,13 @@ const accessLogStream = fs.createWriteStream(path.join(__dirname, 'log.txt'), {f
 app.use(morgan('combined', {stream: accessLogStream}))
 
 //Body parser middleware
-app.use(bodyParser.json())
+app.use(bodyParser.json());
+
+let auth = require('./auth')(app);
+let passport = require('passport');
+require('./passport');
+
+
 
 //serving static files
 app.use(express.static('public'))
@@ -28,32 +34,37 @@ app.use(express.static('public'))
 
 //API Routes
 
-// Home page
+// home page
 app.get('/', (req, res) => {
     res.send('Welcome to dev-books!!!!!!!!');
 });
 
 
 //get all books
-app.get('/books', async (req, res) => {
+app.get('/books', passport.authenticate('jwt', { session: false }), async (req, res) => {
 
     const books = await prisma.book.findMany({
-        include: { genre: true }
+        include: { 
+            genres: true,
+            authors: true
+         }
     })
     res.status(200).json(books);
 });
 
 
 //get books by id
-
 app.get('/books/:id', async (req, res) => {
     const {id} = req.params;
     const book = await prisma.book.findUnique({
         where: {
             id: Number(id)
+        },
+        include: {
+            genres: true,
+            authors: true
         }
     })
-
     if(book) {
         res.status(200).json(book);
     } else {
@@ -62,11 +73,17 @@ app.get('/books/:id', async (req, res) => {
 });
 
 
-//get author by name
-app.get('/books/authors/:authorName', (req, res) => {
-    const {authorName} = req.params;
-    const author = books.find(book => book.author.name === authorName).author;
-
+//get author by id
+app.get('/authors/:authorID', async (req, res) => {
+    const {authorID} = req.params;
+    const author = await prisma.author.findUnique({
+        where: {
+            id: Number(authorID)
+        },
+        include: {
+            books: true
+        }
+    })
     if(author) {
         res.status(200).json(author);
     } else {
@@ -75,22 +92,22 @@ app.get('/books/authors/:authorName', (req, res) => {
 });
 
 
-//add a new user using prisma
+
+//register a new user
 app.post('/users', async (req, res) => {
-    const {name, email, password} = req.body;
+    const {email, username, password} = req.body;
     const userExists = await prisma.user.findUnique({
         where: {
             email: email
         }
     })
-    
     if(userExists) {
         res.status(400).send('This user email is taken, choose a different email address');
     } else {
         const user = await prisma.user.create({
             data: {
-                name: name,
                 email: email,
+                username: username,
                 password: password
             }
         })
@@ -99,17 +116,17 @@ app.post('/users', async (req, res) => {
 });
 
 // delete an existing user
-app.delete('/users/:id', async (req, res) => {
-    const {id} = req.params;
+app.delete('/users/:userId', async (req, res) => {
+    const {userId} = req.params;
     const user = await prisma.user.findUnique({
         where: {
-            id: Number(id)
+            id: Number(userId)
         }
     })
     if(user) {
         await prisma.user.delete({
             where: {
-                id: Number(id)
+                id: Number(userId)
             }
         })
         res.status(200).send('User deleted successfully');
@@ -119,37 +136,47 @@ app.delete('/users/:id', async (req, res) => {
 });
 
 
-//Update username by id and verify if new username already exists
-app.put('/users/:id', (req, res) => {
-    const {id} = req.params;
+//Update username by id
+app.put('/users/:userId', async (req, res) => {
+    const {userId} = req.params;
     const {username} = req.body;
-    const user = users.find(user => user.id === id);
+
+    const user = await prisma.user.findUnique({
+        where: {
+            id: Number(userId)
+        }
+    })
 
     if(user) {
-        const userExists = users.find(user => user.username === username);
-        if(userExists) {
-            res.status(400).send('This username is taken, choose a different username');
-        } else {
-            user.username = username;
-            res.status(200).json(user);
-        }
+        const updatedUser = await prisma.user.update({
+            where: {
+                id: Number(userId)
+            },
+            data: {
+                username: username
+            }
+        })
+        res.status(200).json(updatedUser);
     } else {
         res.status(404).send('User not found');
     }
 });
 
 
-//get all users with prisma
+//get all users
 app.get('/users', async (req, res) => {
     const users = await prisma.user.findMany();
     res.status(200).json(users);
 });
 
-//get user data by username
-app.get('/users/:username', (req, res) => {
-    const {username} = req.params;
-    const user = users.find(user => user.username === username);
-
+//get user data by id
+app.get('/users/:userId', async (req, res) => {
+    const {userId} = req.params;
+    const user = await prisma.user.findUnique({
+        where: {
+            id: Number(userId)
+        }
+    })
     if(user) {
         res.status(200).json(user);
     } else {
@@ -157,35 +184,54 @@ app.get('/users/:username', (req, res) => {
     }
 });
 
-//get user's favorite books by username
-app.get('/users/:username/favorites', (req, res) => {
-    const {username} = req.params;
-    const user = users.find(user => user.username === username);
 
-    if(user) {
-        res.status(200).json(user.favoriteBooks);
-    } else {
-        res.status(404).send('User not found');
-    }
-});
-
-//add a book to user's favorite books
-
-app.post('/users/:userId/favorites/:bookId', (req, res) => {
+//add a book to user's book list
+app.post('/users/:userId/favorites/:bookId', async (req, res) => {
     const { userId, bookId } = req.params;
-    const user = users.find(user => user.id === userId);
-    const book = books.find(book => book.id === bookId).id;
-
+    const user = await prisma.user.findUnique({
+        where: {
+            id: Number(userId)
+        }
+    })
+    const book = await prisma.book.findUnique({
+        where: {
+            id: Number(bookId)
+        }
+    })
     if(user) {
         if(book) {
-            const bookExists = user.favoriteBooks.find(book => book === bookId);
+            //book exists check prisma
+            const bookExists = await prisma.user.findFirst({
+                where: {
+                    id: Number(userId),
+                    books: {
+                        some: {
+                            id: Number(bookId)
+                        }
+                    }
+                }
+            })
+            
             if(bookExists) {
                 res.status(400).send('Book already exists in favorites');
             } else {
-                user.favoriteBooks.push(book);
-                res.status(201).json(user.favoriteBooks);
+                const updatedUser = await prisma.user.update({
+                    where: {
+                        id: Number(userId)
+                    },
+                    data: {
+                        books: {
+                            connect: {
+                                id: Number(bookId)
+                            }
+                        }
+                    },
+                    include: {
+                        books: true
+                    }
+                })
+                res.status(200).json(updatedUser);
             }
-
         } else {
             res.status(404).send('Book not found');
         }
@@ -194,22 +240,53 @@ app.post('/users/:userId/favorites/:bookId', (req, res) => {
     }
 });
 
-//delete a book from user's favorite books
-app.delete('/users/:userId/favorites/:bookId', (req, res) => {
-    const { userId, bookId } = req.params;
-    const user = users.find(user => user.id === userId);
-    const book = books.find(book => book.id === bookId).id;
 
+//delete a book from user's book list
+app.delete('/users/:userId/favorites/:bookId', async (req, res) => {
+    const { userId, bookId } = req.params;
+    const user = await prisma.user.findUnique({
+        where: {
+            id: Number(userId)
+        }
+    })
+    const book = await prisma.book.findUnique({
+        where: {
+            id: Number(bookId)
+        }
+    })
     if(user) {
         if(book) {
-            const bookExists = user.favoriteBooks.find(book => book === bookId);
+            //book exists check prisma
+            const bookExists = await prisma.user.findFirst({ 
+                where: {
+                    id: Number(userId),
+                    books: {
+                        some: {
+                            id: Number(bookId)
+                        }
+                    }
+                }
+            })
             if(bookExists) {
-                user.favoriteBooks = user.favoriteBooks.filter(id => id !== bookId);
-                res.status(200).json(user.favoriteBooks);
+                const updatedUser = await prisma.user.update({
+                    where: {
+                        id: Number(userId)
+                    },
+                    data: {
+                        books: {
+                            disconnect: {
+                                id: Number(bookId)
+                            }
+                        }
+                    },
+                    include: {
+                        books: true
+                    }
+                })
+                res.status(200).json(updatedUser);
             } else {
                 res.status(400).send('Book does not exist in favorites');
             }
-
         } else {
             res.status(404).send('Book not found');
         }
@@ -226,9 +303,7 @@ app.use((err, req, res, next) => {
     res.status(500).send('Something broke!')
 })
 
-
 //Listen for requests
 app.listen(8080, () => {
     console.log("Your app is listening on port 8080.")
 })
-
