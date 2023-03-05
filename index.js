@@ -63,7 +63,7 @@ app.get('/', (req, res) => {
 
 
 //get all books
-app.get('/books', passport.authenticate('jwt', { session: false }), async (req, res) => {
+app.get('/books', async (req, res) => {
 
     const books = await prisma.book.findMany({
         include: { 
@@ -158,7 +158,7 @@ app.post('/users',
 });
 
 // delete an existing user
-app.delete('/users/:userId', async (req, res) => {
+app.delete('/users/:userId',  passport.authenticate('jwt', { session: false }), async (req, res) => {
     const {userId} = req.params;
     const user = await prisma.user.findUnique({
         where: {
@@ -179,7 +179,7 @@ app.delete('/users/:userId', async (req, res) => {
 
 
 //Update username by id
-app.put('/users/:userId', async (req, res) => {
+app.put('/users/:userId',  passport.authenticate('jwt', { session: false }), async (req, res) => {
     const {userId} = req.params;
     const {username} = req.body;
 
@@ -212,7 +212,7 @@ app.get('/users', async (req, res) => {
 });
 
 //get user data by id
-app.get('/users/:userId', async (req, res) => {
+app.get('/users/:userId',  passport.authenticate('jwt', { session: false }), async (req, res) => {
     const {userId} = req.params;
     const user = await prisma.user.findUnique({
         where: {
@@ -228,7 +228,7 @@ app.get('/users/:userId', async (req, res) => {
 
 
 //add a book to user's book list
-app.post('/users/:userId/favorites/:bookId', async (req, res) => {
+app.post('/users/:userId/favorites/:bookId',  passport.authenticate('jwt', { session: false }), async (req, res) => {
     const { userId, bookId } = req.params;
     const user = await prisma.user.findUnique({
         where: {
@@ -284,7 +284,7 @@ app.post('/users/:userId/favorites/:bookId', async (req, res) => {
 
 
 //delete a book from user's book list
-app.delete('/users/:userId/favorites/:bookId', async (req, res) => {
+app.delete('/users/:userId/favorites/:bookId',  passport.authenticate('jwt', { session: false }), async (req, res) => {
     const { userId, bookId } = req.params;
     const user = await prisma.user.findUnique({
         where: {
