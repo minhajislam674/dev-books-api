@@ -4,7 +4,7 @@ const express = require("express")
     fs = require('fs'), // import built in node modules fs and path 
     path = require('path'),
     { v4: uuidv4 } = require('uuid');
-
+require('dotenv').config();
 const { check, validationResult } = require('express-validator');
 
 const bcrypt = require('bcrypt');
@@ -22,7 +22,7 @@ const accessLogStream = fs.createWriteStream(path.join(__dirname, 'log.txt'), {f
 
 // set cors 
 const cors = require('cors');
-let allowedOrigins = ['http://localhost:8080', 'http://dev-books.com'];
+let allowedOrigins = ['http://localhost:8080', 'https://dev-books-api-production.up.railway.app'];
 app.use(cors({
     origin: function(origin, callback){
         // allow requests with no origin
@@ -346,6 +346,4 @@ app.use((err, req, res, next) => {
 })
 
 //Listen for requests
-app.listen(8080, () => {
-    console.log("Your app is listening on port 8080.")
-})
+app.listen(process.env.PORT, () => console.log('Listening on port ' + process.env.PORT));
