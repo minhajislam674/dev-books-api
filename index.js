@@ -217,6 +217,9 @@ app.get('/users/:userId',  passport.authenticate('jwt', { session: false }), asy
     const user = await prisma.user.findUnique({
         where: {
             id: Number(userId)
+        },
+        include: {
+            books: true
         }
     })
     if(user) {

@@ -204,3 +204,6 @@
 ::ffff:127.0.0.1 - - [05/Mar/2023:10:26:13 +0000] "DELETE /users/6 HTTP/1.1" 401 - "-" "PostmanRuntime/7.31.1"
 ::1 - - [05/Mar/2023:11:35:30 +0000] "GET / HTTP/1.1" 200 28 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36 Edg/110.0.1587.63"
 ::1 - - [05/Mar/2023:11:35:31 +0000] "GET /favicon.ico HTTP/1.1" 404 150 "http://localhost:3000/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36 Edg/110.0.1587.63"
+::1 - - [08/Mar/2023:21:55:12 +0000] "GET / HTTP/1.1" 200 28 "-" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+::1 - - [08/Mar/2023:21:55:12 +0000] "GET /favicon.ico HTTP/1.1" 404 150 "http://localhost:3000/" "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/110.0.0.0 Safari/537.36"
+::1 - - [08/Mar/2023:21:55:50 +0000] "GET /users/9 HTTP/1.1" 200 1065 "-" "PostmanRuntime/7.31.1"
