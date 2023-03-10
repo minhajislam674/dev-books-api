@@ -21,21 +21,31 @@ const app = express()
 const accessLogStream = fs.createWriteStream(path.join(__dirname, 'log.txt'), {flags: 'a'})
 
 // set cors 
-const cors = require('cors');
-let allowedOrigins = ['http://localhost:8080', 'https://reads.up.railway.app/', 'https://bookhive.netlify.app/'];
-app.use(cors({
-    origin: function(origin, callback){
-        // allow requests with no origin
-        // (like mobile apps or curl requests)
-        if(!origin) return callback(null, true);
-        if(allowedOrigins.indexOf(origin) === -1){
-            let message = 'The CORS policy for this application doesn’t allow access from origin ' + origin;
-            return callback(new Error(message ), false);
-        }
-        return callback(null, true);
-    }
-}));
+const allowedOrigins = ['http://localhost:8080', 'https://reads.up.railway.app/', 'https://bookhive.netlify.app/'];
 
+const corsOptions = {
+  origin: function(origin, callback){
+    // allow requests with no origin
+    // (like mobile apps or curl requests)
+    if(!origin) return callback(null, true);
+    if(allowedOrigins.indexOf(origin) === -1){
+      let message = 'The CORS policy for this application doesn’t allow access from origin ' + origin;
+      return callback(new Error(message ), false);
+    }
+    return callback(null, true);
+  },
+  methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+  preflightContinue: false,
+  optionsSuccessStatus: 204,
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true
+};
+
+// Add the following lines to enable pre-flight requests for all routes
+app.options('*', cors(corsOptions));
+
+// Use the cors middleware for all routes
+app.use(cors(corsOptions));
 
 //Logging middleware
 app.use(morgan('combined', {stream: accessLogStream}))
