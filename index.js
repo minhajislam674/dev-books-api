@@ -22,7 +22,7 @@ const accessLogStream = fs.createWriteStream(path.join(__dirname, 'log.txt'), {f
 
 // set cors 
 const cors = require('cors');
-let allowedOrigins = ['http://localhost:8080', 'https://reads.up.railway.app/'];
+let allowedOrigins = ['http://localhost:8080', 'https://reads.up.railway.app/, https://bookhive.netlify.app/'];
 app.use(cors({
     origin: function(origin, callback){
         // allow requests with no origin
